@@ -64,8 +64,7 @@ motor_group LeftDrive  = motor_group(leftMotor1,  leftMotor2,  leftMotor3);
 motor_group RightDrive = motor_group(rightMotor1, rightMotor2, rightMotor3);
 motor_group Intake     = motor_group(intakeMotor1, intakeMotor2);
 
-smartdrive driveTrain = smartdrive(LeftDrive, RightDrive, Inertial0,
-                                   319.19, 320, 40, mm, 1.6666666666666667);
+smartdrive driveTrain = smartdrive(LeftDrive, RightDrive, Inertial0,319.19, 320, 40, mm, 1.6666666666666667);
 
 vex::mutex position_mutex;
 
@@ -85,7 +84,7 @@ double Horiz_offset = 0.00;   // tracking center -> horizontal wheel (+ = fwd)
 double inertial_ratio = 360.0 / 360.0;  // inertial scale correction
 
 // ===========================================================================
-//                            ODOMETRY STATE
+//                            ODOMETRY VARIABLES
 // ===========================================================================
 double x_current     = 0.0;
 double y_current     = 0.0;
@@ -145,19 +144,19 @@ double mathFromCompass(double compassDeg) {
     return wrapRad((90.0 - compassDeg) * PI / 180.0);
 }
 
-// Single source of truth for heading. Everything downstream (driveToPoint,
-// pathToPoint, trackBlock) should call this, never Inertial0 directly.
+// returns the current heading in radians, math convention (0 = +X, CCW positive)
 double currentHeadingRad() {
     position_mutex.lock();
     double h = global_heading;
     position_mutex.unlock();
     return h;
 }
-
+// converts current heading to degrees
 double currentHeadingDeg() { 
     return currentHeadingRad() * 180.0 / PI;
 }
 
+// returns true if robot is not moving,
 bool robotIsStationary() {
     return fabs(Rotation_vertL.velocity(dps)) < 2.0 &&
            fabs(Rotation_vertR.velocity(dps)) < 2.0 &&
@@ -165,14 +164,13 @@ bool robotIsStationary() {
 }
 
 // ===========================================================================
-//                         GYRO BIAS (ZUPT + EMA)
+//                         GYRO BIAS 
 // ===========================================================================
-// Learns the inertial's stationary drift rate so the inertial cross-check
-// stays honest over a full match. Harmless when heading_source == WHEELS.
+// The inertial sensor can drift over time, when the robot is stationary heading should be constant so we use this function to counter the inertial drift
 void updateGyroBias() {
     double t  = Brain.timer(msec) / 1000.0;
     double dt = t - prev_bias_time;
-    if (dt < 0.05) return;              // sample at ~20 Hz, not 200 Hz
+    if (dt < 0.05) return;             
 
     double raw  = Inertial0.rotation(degrees);
     double rate = (raw - prev_bias_rotation) / dt;   // deg/s
@@ -194,9 +192,9 @@ void updateOdometry() {
     double vertR = Rotation_vertR.position(turns);
     double horiz = Rotation_horizontal.position(turns);
 
-    double dL = (vertL - prev_vertL) * PI * trackingWheelDiameter;
-    double dR = (vertR - prev_vertR) * PI * trackingWheelDiameter;
-    double dS = (horiz - prev_horiz) * PI * horizWheelDiameter;
+    double dL = (vertL - prev_vertL) * PI * trackingWheelDiameter; //distance left
+    double dR = (vertR - prev_vertR) * PI * trackingWheelDiameter; //distance right
+    double dS = (horiz - prev_horiz) * PI * horizWheelDiameter; //distance horizontal
 
     prev_vertL = vertL;
     prev_vertR = vertR;
@@ -207,8 +205,12 @@ void updateOdometry() {
     // Left  wheel arc  = dC - LVert_offset * dTheta
     // so dTheta = (dR - dL) / (LVert_offset + RVert_offset), CCW positive.
     double track = LVert_offset + RVert_offset;
-    double dTheta_wheel = (track > 1e-6) ? (dR - dL) / track : 0.0;
-
+    double dTheta_wheel;
+    if (track > 1e-6) {
+        dTheta_wheel = (dR - dL) / track;
+    } else {
+        dTheta_wheel = 0.0;
+    }
     // Inertial cross-check. Inertial0.rotation() is unbounded and clockwise
     // positive, so negate it to get CCW-positive math radians. Scaling is
     // applied to rotation(), never heading(), so it stays correct past 360.

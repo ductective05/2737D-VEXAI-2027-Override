@@ -244,9 +244,12 @@ void updateOdometry() {
     //   dC = (LVert_offset*dR + RVert_offset*dL) / track
     // Lateral arc of the tracking center: the horizontal wheel also sees
     // -Horiz_offset*dTheta of pure rotation, so add it back.
-    double dC  = (track > 1e-6)
-               ? (LVert_offset * dR + RVert_offset * dL) / track
-               : 0.5 * (dL + dR);
+    double dC;
+    if (track > 1e-6) {
+        dC = (LVert_offset * dR + RVert_offset * dL) / track;
+    } else {
+        dC = 0.5 * (dL + dR);
+    }
     double dSc = dS + Horiz_offset * dTheta;
 
     // Chord factor: over an arc, the straight-line displacement is
@@ -275,8 +278,8 @@ void updateOdometry() {
     y_current += local_y * sin(heading_mid) - local_x * cos(heading_mid);
 
     // field is 144 in; clamp to keep a bad frame from poisoning downstream math
-    x_current = clamp(x_current, -6.0, 150.0);
-    y_current = clamp(y_current, -6.0, 150.0);
+    x_current = clamp(x_current, 9.0, 135.0);
+    y_current = clamp(y_current, 9.0, 135.0);
 
     position_mutex.unlock();
 }
@@ -311,20 +314,30 @@ int odomTask() {
         updateGyroBias();
         updateOdometry();
 
-        // Screen writes are slow. Print at ~10 Hz, run the math at 200 Hz.
         if (++frame >= 20) {
             frame = 0;
             Brain.Screen.setCursor(1, 1);
             Brain.Screen.clearLine();
             Brain.Screen.print("X: %.2f", x_current);
+            Controller1.Screen.setCursor(1, 1);
+            Controller1.Screen.clearLine();
+            Controller1.Screen.print("X: %.2f", x_current);
 
             Brain.Screen.setCursor(2, 1);
             Brain.Screen.clearLine();
             Brain.Screen.print("Y: %.2f", y_current);
+            Controller1.Screen.setCursor(2, 1);
+            Controller1.Screen.clearLine();
+            Controller1.Screen.print("Y: %.2f", y_current);
+
 
             Brain.Screen.setCursor(3, 1);
             Brain.Screen.clearLine();
             Brain.Screen.print("H: %.2f deg", currentHeadingDeg());
+            Controller1.Screen.setCursor(3, 1);
+            Controller1.Screen.clearLine();
+            Controller1.Screen.print("H: %.2f deg", currentHeadingDeg());
+
 
             // If this number walks away from 0, your track width is wrong or
             // a tracking wheel is slipping.
@@ -477,7 +490,7 @@ int main() {
 
     task odom(odomTask);
 
-    // trackWidthCalibration(10);   // uncomment to calibrate, comment out auton
+    // trackWidthCalibration(10);   // uncomment to calibrate
 
     while (true) {
         vex::wait(20, msec);
